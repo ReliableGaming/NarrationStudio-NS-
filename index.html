@@ -1216,7 +1216,7 @@ function ownerBannerClick(){
   $("owner-lock-icon").style.display="none";
 }
 
-function ownerTextKey(ev){
+async function ownerTextKey(ev){
   if(ev.key==="Enter" && !ev.shiftKey){
     ev.preventDefault();
     const val=$("owner-text-edit").value; // no .trim() — preserve intentional whitespace/newlines
@@ -1224,12 +1224,12 @@ function ownerTextKey(ev){
     localStorage.setItem("ns_owner_text", val);
     // Also write to the page's own script tag so it survives in the downloaded file
     ownerSaveToScript(val);
-    ownerSaveRemote(val);
     // Switch back to display
     $("owner-text-edit").style.display="none";
     $("owner-text-display").style.display="block";
     ownerSetDisplay(val);
-    toast("Announcement saved on this device; publishing if signed in","ok");
+    const published = await ownerSaveRemote(val);
+    toast(published ? "Shared announcement published" : "Saved here, but not published to Firebase","ok");
   }
   if(ev.key==="Escape"){
     $("owner-text-edit").style.display="none";
@@ -1288,13 +1288,13 @@ async function ownerLoadRemote(){
 }
 
 async function ownerSaveRemote(text){
-  if(!ownerSyncEnabled()) return;
+  if(!ownerSyncEnabled()) return false;
   try{
     const token = await ownerGetAuthToken();
     if(!token){
       toast("Sign in with Firebase before publishing shared announcements","err");
       ownerRenderAuthPanel("Sign in required before saving to Firebase.");
-      return;
+      return false;
     }
     ownerLastRemoteText = text;
     const res = await fetch(ownerSyncUrl(token), {
@@ -1303,9 +1303,11 @@ async function ownerSaveRemote(text){
       body:JSON.stringify({ text, updatedAt:Date.now() })
     });
     if(!res.ok) throw new Error("HTTP "+res.status);
+    return true;
   }catch(err){
     console.warn("Announcement sync save failed:", err);
-    toast("Saved here, but shared announcement sync failed","err");
+    toast("Firebase publish failed: "+err.message,"err");
+    return false;
   }
 }
 
