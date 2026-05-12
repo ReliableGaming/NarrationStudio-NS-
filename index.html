@@ -729,7 +729,7 @@
   <div style="margin-top:24px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,255,0.7)" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
-      <span style="font-size:11px;font-weight:600;letter-spacing:.10em;text-transform:uppercase;color:rgba(167,139,255,0.6)">Streamer Announcement Board</span>
+      <span style="font-size:11px;font-weight:600;letter-spacing:.10em;text-transform:uppercase;color:rgba(167,139,255,0.6)">Owner Splash Text</span>
       <div style="flex:1;height:1px;background:rgba(167,139,255,0.15)"></div>
     </div>
     <div id="owner-banner" style="
@@ -1150,12 +1150,12 @@ function setTestSource(src){
 }
 
 /* ============================== OWNER TEXT ============================== */
-// Update this text, then redeploy index.html to change the public announcement.
+// Update this text, then redeploy index.html to change the public owner splash text.
 // Use \n inside the string for line breaks. Leave it empty to show the default message.
-const STREAMER_ANNOUNCEMENT_TEXT = "";
+const OWNER_SPLASH_TEXT = "";
 
 function ownerInit(){
-  const txt = STREAMER_ANNOUNCEMENT_TEXT;
+  const txt = OWNER_SPLASH_TEXT = "Welcome in. This little tool reads live chat from your stream and turns messages into narration, with options for filters, commands, sounds, and text-to-speech settings. Connect the platforms you want to use, tune the voice and safety controls, then test a message before going live. Make yourself comfortable, poke around, and let the chat do what chat does best.";
   const d = $("owner-text-display");
   if(!d) return;
   if(txt){
