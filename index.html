@@ -742,17 +742,7 @@
       position:relative;
       cursor:default;
     ">
-      <div id="owner-text-display" style="font-size:14px;color:var(--ink-dim);line-height:1.7;white-space:pre-wrap;word-break:break-word" onclick="ownerBannerClick()"></div>
-      <textarea id="owner-text-edit" style="display:none;width:100%;min-height:80px;background:transparent;border:none;outline:none;color:var(--ink);font:inherit;font-size:14px;line-height:1.7;resize:vertical;padding:0;max-height:none" placeholder="Type your announcement here… (Shift+Enter for new line, Enter to save)" onkeydown="ownerTextKey(event)"></textarea>
-      <div id="owner-lock-icon" style="position:absolute;top:14px;right:16px;font-size:14px;color:var(--ink-mute);user-select:none" title="Send the unlock code in Test Chat to edit this announcement">&#128274;</div>
-      <div id="owner-auth-panel" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid rgba(167,139,255,0.16)">
-        <div class="row" style="margin-bottom:8px">
-          <input id="owner-auth-email" type="email" placeholder="Owner email" autocomplete="username" style="min-width:220px;flex:1"/>
-          <input id="owner-auth-password" type="password" placeholder="Firebase password" autocomplete="current-password" style="min-width:220px;flex:1"/>
-          <button class="btn small" type="button" onclick="ownerSignIn()">Sign in</button>
-        </div>
-        <div id="owner-auth-status" style="font-size:12px;color:var(--ink-mute);line-height:1.4">Sign in to publish shared announcements.</div>
-      </div>
+      <div id="owner-text-display" style="font-size:14px;color:var(--ink-dim);line-height:1.7;white-space:pre-wrap;word-break:break-word"></div>
     </div>
   </div>
 </div>
@@ -1160,276 +1150,22 @@ function setTestSource(src){
 }
 
 /* ============================== OWNER TEXT ============================== */
-// To make the announcement update for everyone, create a Firebase Realtime Database
-// and paste its database URL below, for example:
-//   https://your-project-id-default-rtdb.firebaseio.com
-// Without that URL, the announcement still works on this device with localStorage.
-const OWNER_UNLOCK_CODE = "I'm the owner of this website: code-2638449172009";
-const OWNER_SYNC_CONFIG = {
-  databaseUrl: "https://narrationstudio-default-rtdb.firebaseio.com",
-  path: "narrationstudio/owner-announcement",
-  pollMs: 4000
-};
-const OWNER_AUTH_CONFIG = {
-  apiKey: "AIzaSyB8A75Cf1vo02jlq1aCtTlCQgWsZNbLCB4",
-  email: ""
-};
-let ownerUnlocked = false;
-let ownerSyncTimer = null;
-let ownerLastRemoteText = null;
-let ownerAuth = { idToken:null, refreshToken:null, email:null, uid:null, expiresAt:0 };
+// Update this text, then redeploy index.html to change the public announcement.
+// Use \n inside the string for line breaks. Leave it empty to show the default message.
+const STREAMER_ANNOUNCEMENT_TEXT = "";
 
 function ownerInit(){
-  // Try localStorage first, then the embedded data attribute fallback
-  let txt = localStorage.getItem("ns_owner_text") || "";
-  if(!txt){
-    // Try reading from embedded data attr on this script tag
-    const scripts = document.querySelectorAll("script[data-owner-text]");
-    if(scripts.length) txt = decodeURIComponent(scripts[scripts.length-1].getAttribute("data-owner-text")||"");
-  }
-  ownerRestoreAuth();
-  ownerSetDisplay(txt);
-  ownerRenderAuthPanel();
-  ownerStartSync();
-}
-
-function ownerSetDisplay(txt){
-  const d=$("owner-text-display");
-  const lock=$("owner-lock-icon");
+  const txt = STREAMER_ANNOUNCEMENT_TEXT;
+  const d = $("owner-text-display");
+  if(!d) return;
   if(txt){
-    d.textContent=txt;
-    d.style.color="var(--ink)";
-    lock.style.display=ownerUnlocked?"none":"block";
+    d.textContent = txt;
+    d.style.color = "var(--ink)";
   } else {
-    d.textContent=ownerUnlocked?"Click here to add your announcement…":"The owner has not left a message for you yet.. :(";
-    d.style.color="var(--ink-mute)";
-    lock.style.display=ownerUnlocked?"none":"block";
+    d.textContent = "The owner has not left a message for you yet.. :(";
+    d.style.color = "var(--ink-mute)";
   }
 }
-
-function ownerBannerClick(){
-  if(!ownerUnlocked){ toast("Send the unlock code in the Test Chat to edit this area","err"); return; }
-  // Switch to edit mode
-  const d=$("owner-text-display"),e=$("owner-text-edit");
-  e.value=(d.textContent==="Click here to add your announcement…"||d.textContent==="The owner has not left a message for you yet.. :(")?"":d.textContent;
-  d.style.display="none"; e.style.display="block"; e.focus();
-  $("owner-lock-icon").style.display="none";
-}
-
-async function ownerTextKey(ev){
-  if(ev.key==="Enter" && !ev.shiftKey){
-    ev.preventDefault();
-    const val=$("owner-text-edit").value; // no .trim() — preserve intentional whitespace/newlines
-    // Save to localStorage
-    localStorage.setItem("ns_owner_text", val);
-    // Also write to the page's own script tag so it survives in the downloaded file
-    ownerSaveToScript(val);
-    // Switch back to display
-    $("owner-text-edit").style.display="none";
-    $("owner-text-display").style.display="block";
-    ownerSetDisplay(val);
-    const published = await ownerSaveRemote(val);
-    toast(published ? "Shared announcement published" : "Saved here, but not published to Firebase","ok");
-  }
-  if(ev.key==="Escape"){
-    $("owner-text-edit").style.display="none";
-    $("owner-text-display").style.display="block";
-  }
-  // Shift+Enter inserts a newline naturally (default textarea behavior) — no special handling needed
-}
-
-function ownerSaveToScript(text){
-  // Find the owner-data script tag and update it; if not found, create one
-  let tag = document.querySelector("script[data-owner-text]");
-  if(!tag){
-    tag = document.createElement("script");
-    tag.type="text/x-owner-data";
-    document.head.appendChild(tag);
-  }
-  tag.setAttribute("data-owner-text", encodeURIComponent(text));
-  // Also attempt to trigger a "Save As" with the updated text embedded — but
-  // since we can't overwrite the file directly, we rely on localStorage as primary
-  // persistence, with the data attribute as a secondary signal. If the user
-  // re-downloads via Ctrl+S, the data attr will be in the saved file.
-}
-
-function ownerSyncEnabled(){
-  return !!(OWNER_SYNC_CONFIG.databaseUrl && OWNER_SYNC_CONFIG.databaseUrl.trim());
-}
-
-function ownerSyncUrl(authToken){
-  const base = OWNER_SYNC_CONFIG.databaseUrl.trim().replace(/\/+$/,"");
-  const path = (OWNER_SYNC_CONFIG.path || "owner-announcement").replace(/^\/+|\/+$/g,"");
-  const auth = authToken ? `?auth=${encodeURIComponent(authToken)}` : "";
-  return `${base}/${path}.json${auth}`;
-}
-
-function ownerStartSync(){
-  if(!ownerSyncEnabled() || ownerSyncTimer) return;
-  ownerLoadRemote();
-  ownerSyncTimer = setInterval(ownerLoadRemote, Math.max(1000, OWNER_SYNC_CONFIG.pollMs || 4000));
-}
-
-async function ownerLoadRemote(){
-  if(!ownerSyncEnabled()) return;
-  try{
-    const res = await fetch(ownerSyncUrl(), { cache:"no-store" });
-    if(!res.ok) throw new Error("HTTP "+res.status);
-    const data = await res.json();
-    const txt = data && typeof data.text==="string" ? data.text : "";
-    if(txt !== ownerLastRemoteText){
-      ownerLastRemoteText = txt;
-      localStorage.setItem("ns_owner_text", txt);
-      if($("owner-text-edit").style.display !== "block") ownerSetDisplay(txt);
-    }
-  }catch(err){
-    console.warn("Announcement sync read failed:", err);
-  }
-}
-
-async function ownerSaveRemote(text){
-  if(!ownerSyncEnabled()) return false;
-  try{
-    const token = await ownerGetAuthToken();
-    if(!token){
-      toast("Sign in with Firebase before publishing shared announcements","err");
-      ownerRenderAuthPanel("Sign in required before saving to Firebase.");
-      return false;
-    }
-    ownerLastRemoteText = text;
-    const res = await fetch(ownerSyncUrl(token), {
-      method:"PUT",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ text, updatedAt:Date.now() })
-    });
-    if(!res.ok) throw new Error("HTTP "+res.status);
-    return true;
-  }catch(err){
-    console.warn("Announcement sync save failed:", err);
-    toast("Firebase publish failed: "+err.message,"err");
-    return false;
-  }
-}
-
-function ownerAuthEnabled(){
-  return !!(OWNER_AUTH_CONFIG.apiKey && OWNER_AUTH_CONFIG.apiKey.trim());
-}
-
-function ownerRestoreAuth(){
-  try{
-    const saved = JSON.parse(sessionStorage.getItem("ns_owner_auth") || "{}");
-    if(saved && saved.idToken) ownerAuth = Object.assign(ownerAuth, saved);
-  }catch(_){}
-}
-
-function ownerPersistAuth(){
-  sessionStorage.setItem("ns_owner_auth", JSON.stringify(ownerAuth));
-}
-
-function ownerRenderAuthPanel(msg){
-  const panel = $("owner-auth-panel");
-  const status = $("owner-auth-status");
-  const email = $("owner-auth-email");
-  if(!panel || !status) return;
-  panel.style.display = ownerUnlocked && ownerSyncEnabled() ? "block" : "none";
-  if(email && OWNER_AUTH_CONFIG.email && !email.value) email.value = OWNER_AUTH_CONFIG.email;
-  if(!ownerAuthEnabled()){
-    status.textContent = "Add your Firebase Web API Key in OWNER_AUTH_CONFIG before signing in.";
-    status.style.color = "var(--warn)";
-  } else if(ownerAuth.idToken){
-    status.textContent = `Signed in as ${ownerAuth.email || "owner"}. Shared saves are enabled.`;
-    status.style.color = "var(--ok)";
-  } else {
-    status.textContent = msg || "Sign in to publish shared announcements.";
-    status.style.color = "var(--ink-mute)";
-  }
-}
-
-async function ownerSignIn(){
-  if(!ownerAuthEnabled()){
-    ownerRenderAuthPanel();
-    toast("Paste your Firebase Web API Key into OWNER_AUTH_CONFIG first","err");
-    return;
-  }
-  const email = $("owner-auth-email").value.trim();
-  const password = $("owner-auth-password").value;
-  if(!email || !password){ toast("Enter your Firebase email and password","err"); return; }
-  try{
-    const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(OWNER_AUTH_CONFIG.apiKey.trim())}`, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ email, password, returnSecureToken:true })
-    });
-    const data = await res.json();
-    if(!res.ok) throw new Error(data.error?.message || "Sign-in failed");
-    ownerAuth = {
-      idToken:data.idToken,
-      refreshToken:data.refreshToken,
-      email:data.email,
-      uid:data.localId,
-      expiresAt:Date.now() + ((Number(data.expiresIn) || 3600) * 1000)
-    };
-    $("owner-auth-password").value = "";
-    ownerPersistAuth();
-    ownerRenderAuthPanel();
-    toast("Firebase owner sign-in successful","ok");
-  }catch(err){
-    ownerAuth = { idToken:null, refreshToken:null, email:null, uid:null, expiresAt:0 };
-    ownerPersistAuth();
-    ownerRenderAuthPanel("Sign-in failed. Check the email, password, and Web API Key.");
-    toast("Firebase sign-in failed: "+err.message,"err");
-  }
-}
-
-async function ownerGetAuthToken(){
-  if(!ownerAuthEnabled()) return null;
-  if(ownerAuth.idToken && ownerAuth.expiresAt > Date.now() + 60000) return ownerAuth.idToken;
-  if(!ownerAuth.refreshToken) return null;
-  try{
-    const body = new URLSearchParams();
-    body.set("grant_type", "refresh_token");
-    body.set("refresh_token", ownerAuth.refreshToken);
-    const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(OWNER_AUTH_CONFIG.apiKey.trim())}`, {
-      method:"POST",
-      headers:{ "Content-Type":"application/x-www-form-urlencoded" },
-      body
-    });
-    const data = await res.json();
-    if(!res.ok) throw new Error(data.error?.message || "Token refresh failed");
-    ownerAuth.idToken = data.id_token;
-    ownerAuth.refreshToken = data.refresh_token || ownerAuth.refreshToken;
-    ownerAuth.uid = data.user_id || ownerAuth.uid;
-    ownerAuth.expiresAt = Date.now() + ((Number(data.expires_in) || 3600) * 1000);
-    ownerPersistAuth();
-    ownerRenderAuthPanel();
-    return ownerAuth.idToken;
-  }catch(err){
-    console.warn("Firebase owner token refresh failed:", err);
-    ownerAuth = { idToken:null, refreshToken:null, email:null, uid:null, expiresAt:0 };
-    ownerPersistAuth();
-    return null;
-  }
-}
-
-function ownerCheckUnlock(msg){
-  if(msg.trim()===OWNER_UNLOCK_CODE){
-    ownerUnlocked=true;
-    const lock=$("owner-lock-icon");
-    if(lock) lock.style.display="none";
-    const d=$("owner-text-display");
-    const cur=localStorage.getItem("ns_owner_text")||"";
-    ownerSetDisplay(cur);
-    // Add a glowing border to the banner
-    $("owner-banner").style.borderColor="rgba(125,242,197,0.5)";
-    $("owner-banner").style.boxShadow="0 0 18px rgba(125,242,197,0.15)";
-    ownerRenderAuthPanel();
-    toast("🔓 Owner mode unlocked — click the banner to edit","ok");
-    return true; // prevent this code from being spoken aloud
-  }
-  return false;
-}
-
-
 let bgmYtPlayer = null;
 let bgmMode = "none"; // "yt" | "file"
 
@@ -1711,8 +1447,6 @@ document.addEventListener("DOMContentLoaded",()=>{
     const user=$("test-user").value.trim()||"testviewer";
     const msg=$("test-msg").value.trim();
     if(!msg){toast("Enter a test message","err");return;}
-    // Check for owner unlock code — if matched, don't process as chat message
-    if(ownerCheckUnlock(msg)){ $("test-msg").value=""; return; }
     addMessage({source:state.testSource,user,text:msg});
     $("test-msg").value="";
   }
